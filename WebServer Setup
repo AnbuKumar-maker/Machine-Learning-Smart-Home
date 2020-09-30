@@ -1,0 +1,11 @@
+$User = "<YOUR AZURE EMAIL>"
+$PWord = ConvertTo-SecureString -String "<YOUR AZURE PASSWORD>" -AsPlainText -Force
+$tenant = "<TENANT ID>"
+$subscription = "<SUBSCRIPTION ID>"
+$Credential = New-Object -TypeName "System.Management.Automation.PSCredential" -ArgumentList $User,$PWord
+$connect = Connect-AzAccount -Credential $Credential -Tenant $tenant -Subscription $subscription
+
+$wsd = Get-AzMlWebService -Name '<PREDICTIVE WEB SERVICE NAME>' -ResourceGroupName '<RESOURCE GROUP>'
+$json = Export-AzMlWebService -WebService $wsd -ToJsonString
+
+Write-Output $json
