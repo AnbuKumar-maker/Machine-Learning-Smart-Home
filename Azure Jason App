@@ -1,0 +1,432 @@
+{
+    "$connections": {
+        "value": {
+            "azureautomation": {
+                "connectionId": "/subscriptions/<YOUR SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.Web/connections/azureautomation",
+                "connectionName": "azureautomation",
+                "id": "/subscriptions/<YOUR SUBSCRIPTION ID>/providers/Microsoft.Web/locations/<LOCATION>/managedApis/azureautomation"
+            },
+            "azureblob": {
+                "connectionId": "/subscriptions/<YOUR SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.Web/connections/azureblob",
+                "connectionName": "azureblob",
+                "id": "/subscriptions/<YOUR SUBSCRIPTION ID>/providers/Microsoft.Web/locations/<LOCATION>/managedApis/azureblob"
+            },
+            "azureeventgrid": {
+                "connectionId": "/subscriptions/<YOUR SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.Web/connections/azureeventgrid",
+                "connectionName": "azureeventgrid",
+                "id": "/subscriptions/<YOUR SUBSCRIPTION ID>/providers/Microsoft.Web/locations/<LOCATION>/managedApis/azureeventgrid"
+            },
+            "plumsail": {
+                "connectionId": "/subscriptions/<YOUR SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.Web/connections/plumsail",
+                "connectionName": "plumsail",
+                "id": "/subscriptions/<YOUR SUBSCRIPTION ID>/providers/Microsoft.Web/locations/<LOCATION>/managedApis/plumsail"
+            }
+        }
+    },
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "Create_CSV_table": {
+                "inputs": {
+                    "format": "CSV",
+                    "from": "@variables('data')"
+                },
+                "runAfter": {
+                    "For_each": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Table"
+            },
+            "Create_job": {
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azureautomation']['connectionId']"
+                        }
+                    },
+                    "method": "put",
+                    "path": "/subscriptions/@{encodeURIComponent('<YOUR SUBSCRIPTION ID>')}/resourceGroups/@{encodeURIComponent('<RESOURCE GROUP>')}/providers/Microsoft.Automation/automationAccounts/@{encodeURIComponent('<AUTOMATION NAME>')}/jobs",
+                    "queries": {
+                        "runbookName": "ExportWebService",
+                        "wait": true,
+                        "x-ms-api-version": "2015-10-31"
+                    }
+                },
+                "runAfter": {
+                    "Delay": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection"
+            },
+            "Create_job_2": {
+                "inputs": {
+                    "body": {
+                        "properties": {
+                            "parameters": {
+                                "wsd": "@variables('webServiceDef')"
+                            }
+                        }
+                    },
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azureautomation']['connectionId']"
+                        }
+                    },
+                    "method": "put",
+                    "path": "/subscriptions/@{encodeURIComponent('<YOUR SUBSCRIPTION ID>')}/resourceGroups/@{encodeURIComponent('<RESOURCE GROUP>')}/providers/Microsoft.Automation/automationAccounts/@{encodeURIComponent('<AUTOMATION NAME>')}/jobs",
+                    "queries": {
+                        "runbookName": "ImportWebService",
+                        "wait": true,
+                        "x-ms-api-version": "2015-10-31"
+                    }
+                },
+                "runAfter": {
+                    "Set_variable_2": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection"
+            },
+            "Delay": {
+                "inputs": {
+                    "interval": {
+                        "count": 1,
+                        "unit": "Minute"
+                    }
+                },
+                "runAfter": {
+                    "HTTP_2": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Wait"
+            },
+            "Execute_JavaScript_Code": {
+                "inputs": {
+                    "code": "var oldData = workflowContext.actions.Parse_CSV.outputs.body\r\noldData.shift();\r\n\r\nvar fixedData = [];\r\n\r\nfor(var i=0; i<oldData.length; i++){\r\n    var fixedItem = {}\r\n    fixedItem.Hour = parseInt(oldData[i].Hour, 10);\r\n    fixedItem.Brightness = parseInt(oldData[i].Brightness, 10);\r\n    fixedData.push(fixedItem);\r\n}\r\n\r\nreturn fixedData;"
+                },
+                "runAfter": {
+                    "Initialize_variable": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "JavaScriptCode"
+            },
+            "Execute_JavaScript_Code_2": {
+                "inputs": {
+                    "code": "var telemData = workflowContext.trigger.outputs.body\r\nvar data = JSON.parse(telemData.data.body.data);\r\ndata = data.data;\r\n\r\nvar formatTelemData = [];\r\n\r\nfor(var i=0; i<data.length; i++){\r\n    var item = {};\r\n    item.Hour = i;\r\n    item.Brightness = data[i];\r\n    formatTelemData.push(item);\r\n}\r\n\r\nreturn formatTelemData;"
+                },
+                "runAfter": {
+                    "Initialize_variable_3": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "JavaScriptCode"
+            },
+            "Execute_JavaScript_Code_3": {
+                "inputs": {
+                    "code": "var webDefinition = workflowContext.actions.Get_job_output.outputs.body;\r\n\r\nvar updatedWebDefinition = JSON.parse(webDefinition);\r\nupdatedWebDefinition.properties.assets.asset2.locationInfo.uri = \"https://<STORAGE NAME>.blob.core.windows.net/<STORAGE CONTAINER>/training/output1results.ilearner\";\r\n\r\nvar returnData = JSON.stringify(updatedWebDefinition);\r\n\r\nreturn returnData;"
+                },
+                "runAfter": {
+                    "Initialize_variable_2": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "JavaScriptCode"
+            },
+            "For_each": {
+                "actions": {
+                    "Append_to_array_variable_2": {
+                        "inputs": {
+                            "name": "data",
+                            "value": "@items('For_each')"
+                        },
+                        "runAfter": {},
+                        "type": "AppendToArrayVariable"
+                    }
+                },
+                "foreach": "@variables('newData')",
+                "runAfter": {
+                    "Set_variable": [
+                        "Succeeded"
+                    ],
+                    "Set_variable_3": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            },
+            "Get_blob_content": {
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azureblob']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/datasets/default/files/@{encodeURIComponent(encodeURIComponent('<STORAGE FILE>'))}/content",
+                    "queries": {
+                        "inferContentType": true
+                    }
+                },
+                "runAfter": {},
+                "type": "ApiConnection"
+            },
+            "Get_job_output": {
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azureautomation']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/subscriptions/@{encodeURIComponent('<YOUR SUBSCRIPTION ID>')}/resourceGroups/@{encodeURIComponent('<RESOURCE GROUP>')}/providers/Microsoft.Automation/automationAccounts/@{encodeURIComponent('<AUTOMATION NAME>')}/jobs/@{encodeURIComponent(body('Create_job')?['properties']?['jobId'])}/output",
+                    "queries": {
+                        "x-ms-api-version": "2015-10-31"
+                    }
+                },
+                "runAfter": {
+                    "Create_job": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection"
+            },
+            "Get_job_output_2": {
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azureautomation']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/subscriptions/@{encodeURIComponent('<YOUR SUBSCRIPTION ID>')}/resourceGroups/@{encodeURIComponent('<RESOURCE GROUP>')}/providers/Microsoft.Automation/automationAccounts/@{encodeURIComponent('<AUTOMATION NAME>')}/jobs/@{encodeURIComponent(body('Create_job_2')?['properties']?['jobId'])}/output",
+                    "queries": {
+                        "x-ms-api-version": "2015-10-31"
+                    }
+                },
+                "runAfter": {
+                    "Create_job_2": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection"
+            },
+            "HTTP": {
+                "inputs": {
+                    "body": {
+                        "GlobalParameters": {},
+                        "Inputs": {
+                            "input1": {
+                                "BaseLocation": "https://<STORAGE NAME>.blob.core.windows.net/",
+                                "ConnectionString": "<STORAGE CONNECT STRING>",
+                                "RelativeLocation": "<STORAGE CONTAINER>/data.csv"
+                            }
+                        },
+                        "Outputs": {
+                            "output1": {
+                                "BaseLocation": "https://<STORAGE NAME>.blob.core.windows.net/",
+                                "ConnectionString": "<STORAGE CONNECT STRING>",
+                                "RelativeLocation": "<STORAGE CONTAINER>/training/output1results.ilearner"
+                            },
+                            "output2": {
+                                "BaseLocation": "https://<STORAGE NAME>.blob.core.windows.net/",
+                                "ConnectionString": "<STORAGE CONNECT STRING>",
+                                "RelativeLocation": "<STORAGE CONTAINER>/training/output2results.csv"
+                            }
+                        }
+                    },
+                    "headers": {
+                        "Authorization": "Bearer <TRAIN KEY>",
+                        "Content-Type": "application/json"
+                    },
+                    "method": "POST",
+                    "uri": "<TRAIN URL>"
+                },
+                "runAfter": {
+                    "Update_blob": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "HTTP_2": {
+                "inputs": {
+                    "headers": {
+                        "Authorization": "Bearer <TRAIN KEY>"
+                    },
+                    "method": "POST",
+                    "uri": "<TRAIN URL 2>/@{body('HTTP')}/start?api-version=2.0"
+                },
+                "runAfter": {
+                    "HTTP": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Initialize_variable": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "data",
+                            "type": "Array"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Parse_CSV": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_variable_2": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "webServiceDef",
+                            "type": "String"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Get_job_output": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_variable_3": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "newData",
+                            "type": "Array"
+                        }
+                    ]
+                },
+                "runAfter": {},
+                "type": "InitializeVariable"
+            },
+            "Parse_CSV": {
+                "inputs": {
+                    "body": {
+                        "content": "@{base64(body('Get_blob_content'))}",
+                        "headers": "Hour,Brightness"
+                    },
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['plumsail']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "path": "/flow/v1/Documents/jobs/ParseCsv"
+                },
+                "runAfter": {
+                    "Get_blob_content": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection"
+            },
+            "Set_variable": {
+                "inputs": {
+                    "name": "data",
+                    "value": "@outputs('Execute_JavaScript_Code')?['body']"
+                },
+                "runAfter": {
+                    "Execute_JavaScript_Code": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "SetVariable"
+            },
+            "Set_variable_2": {
+                "inputs": {
+                    "name": "webServiceDef",
+                    "value": "@{outputs('Execute_JavaScript_Code_3')?['body']}"
+                },
+                "runAfter": {
+                    "Execute_JavaScript_Code_3": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "SetVariable"
+            },
+            "Set_variable_3": {
+                "inputs": {
+                    "name": "newData",
+                    "value": "@outputs('Execute_JavaScript_Code_2')?['body']"
+                },
+                "runAfter": {
+                    "Execute_JavaScript_Code_2": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "SetVariable"
+            },
+            "Update_blob": {
+                "inputs": {
+                    "body": "@body('Create_CSV_table')",
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azureblob']['connectionId']"
+                        }
+                    },
+                    "method": "put",
+                    "path": "/datasets/default/files/@{encodeURIComponent(encodeURIComponent('<STORAGE FILE>'))}"
+                },
+                "runAfter": {
+                    "Create_CSV_table": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "defaultValue": {},
+                "type": "Object"
+            }
+        },
+        "triggers": {
+            "When_a_resource_event_occurs": {
+                "inputs": {
+                    "body": {
+                        "properties": {
+                            "destination": {
+                                "endpointType": "webhook",
+                                "properties": {
+                                    "endpointUrl": "@{listCallbackUrl()}"
+                                }
+                            },
+                            "filter": {
+                                "includedEventTypes": [
+                                    "Microsoft.Devices.DeviceTelemetry"
+                                ]
+                            },
+                            "topic": "/subscriptions/<YOUR SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.Devices/IotHubs/<IOT HUB NAME>"
+                        }
+                    },
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azureeventgrid']['connectionId']"
+                        }
+                    },
+                    "path": "/subscriptions/@{encodeURIComponent('<YOUR SUBSCRIPTION ID>')}/providers/@{encodeURIComponent('Microsoft.Devices.IoTHubs')}/resource/eventSubscriptions",
+                    "queries": {
+                        "x-ms-api-version": "2017-09-15-preview"
+                    }
+                },
+                "splitOn": "@triggerBody()",
+                "type": "ApiConnectionWebhook"
+            }
+        }
+    }
+}
