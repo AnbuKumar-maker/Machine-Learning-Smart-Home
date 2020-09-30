@@ -1,0 +1,17 @@
+Param
+(
+  [Parameter (Mandatory= $true)]
+  [String] $wsd
+)
+
+$User = "<YOUR AZURE EMAIL>"
+$PWord = ConvertTo-SecureString -String "<YOUR AZURE PASSWORD>" -AsPlainText -Force
+$tenant = "<TENANT ID>"
+$subscription = "<SUBSCRIPTION ID>"
+$Credential = New-Object -TypeName "System.Management.Automation.PSCredential" -ArgumentList $User,$PWord
+$connect = Connect-AzAccount -Credential $Credential -Tenant $tenant -Subscription $subscription
+
+$wsd = Import-AzMlWebService -JsonString $wsd
+$result = Update-AzMlWebService -Name '<PREDICITVE WEB SERVICE NAME>' -ResourceGroupName '<RESOURCE GROUP>'
+
+Write-Output $result
